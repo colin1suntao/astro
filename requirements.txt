@@ -1,0 +1,23 @@
+# 数据处理
+pandas
+numpy
+scikit-learn
+xgboost
+
+# 数据获取
+requests
+astropy
+ccxt
+
+# 数据存储
+psycopg2-binary
+
+# 可视化
+matplotlib
+seaborn
+plotly
+
+# 工具
+pytz
+python-dotenv
+loguru
