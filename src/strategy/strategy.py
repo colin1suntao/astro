@@ -9,9 +9,17 @@ class TradingStrategy:
     
     def __init__(self):
         """初始化"""
-        self.max_position_size = config.MAX_POSITION_SIZE
-        self.stop_loss = config.STOP_LOSS
-        self.take_profit = config.TAKE_PROFIT
+        self.base_max_position_size = config.MAX_POSITION_SIZE
+        self.base_stop_loss = config.STOP_LOSS
+        self.base_take_profit = config.TAKE_PROFIT
+        self.base_threshold = 0.4  # 优化后的基础阈值
+        
+        # 动态参数
+        self.max_position_size = self.base_max_position_size
+        self.stop_loss = self.base_stop_loss
+        self.take_profit = self.base_take_profit
+        self.threshold = self.base_threshold
+        
         self.trading_mode = config.TRADING_MODE
         self.exchange = None
         
@@ -28,23 +36,69 @@ class TradingStrategy:
                 logger.error(f"交易所连接失败: {e}")
                 self.exchange = None
     
-    def generate_signals(self, predictions, threshold=0.4):
+    def adjust_parameters(self, market_sentiment, volatility):
+        """
+        根据市场情况调整策略参数
+        
+        Args:
+            market_sentiment: 市场情绪指数
+            volatility: 市场波动率
+        """
+        try:
+            # 根据市场情绪调整参数
+            if market_sentiment > 0.5:  # 乐观情绪
+                # 增加仓位，降低阈值以捕捉更多机会
+                self.max_position_size = min(self.base_max_position_size * 1.2, 0.3)  # 最大不超过30%
+                self.threshold = max(self.base_threshold * 0.8, 0.2)  # 最低阈值0.2
+                self.take_profit = min(self.base_take_profit * 1.1, 0.15)  # 提高止盈
+                self.stop_loss = max(self.base_stop_loss * 0.9, 0.03)  # 降低止损
+            elif market_sentiment < -0.5:  # 悲观情绪
+                # 减少仓位，提高阈值以过滤噪音
+                self.max_position_size = max(self.base_max_position_size * 0.8, 0.1)  # 最小不低于10%
+                self.threshold = min(self.base_threshold * 1.2, 0.6)  # 最高阈值0.6
+                self.take_profit = max(self.base_take_profit * 0.9, 0.08)  # 降低止盈
+                self.stop_loss = min(self.base_stop_loss * 1.1, 0.07)  # 提高止损
+            else:  # 中性情绪
+                # 恢复基础参数
+                self.max_position_size = self.base_max_position_size
+                self.threshold = self.base_threshold
+                self.take_profit = self.base_take_profit
+                self.stop_loss = self.base_stop_loss
+            
+            # 根据波动率调整参数
+            if volatility > 0.05:  # 高波动率
+                # 减少仓位，提高止损
+                self.max_position_size = max(self.max_position_size * 0.9, 0.1)
+                self.stop_loss = min(self.stop_loss * 1.1, 0.07)
+            elif volatility < 0.02:  # 低波动率
+                # 增加仓位，降低止损
+                self.max_position_size = min(self.max_position_size * 1.1, 0.3)
+                self.stop_loss = max(self.stop_loss * 0.9, 0.03)
+            
+            logger.info(f"动态调整参数: 最大仓位={self.max_position_size:.2f}, 阈值={self.threshold:.2f}, 止盈={self.take_profit:.2f}, 止损={self.stop_loss:.2f}")
+        except Exception as e:
+            logger.error(f"调整参数失败: {e}")
+    
+    def generate_signals(self, predictions, threshold=None):
         """
         生成交易信号
         
         Args:
             predictions: 预测结果
-            threshold: 信号阈值（使用优化后的参数）
+            threshold: 信号阈值（None时使用动态调整的阈值）
             
         Returns:
             list: 交易信号列表，1表示买入，-1表示卖出，0表示持有
         """
         try:
+            # 使用动态调整的阈值或传入的阈值
+            current_threshold = threshold if threshold is not None else self.threshold
+            
             signals = []
             for pred in predictions:
-                if pred > threshold:
+                if pred > current_threshold:
                     signals.append(1)  # 买入
-                elif pred < -threshold:
+                elif pred < -current_threshold:
                     signals.append(-1)  # 卖出
                 else:
                     signals.append(0)  # 持有
@@ -161,7 +215,7 @@ class TradingStrategy:
             logger.error(f"执行交易失败: {e}")
             return {'status': 'error', 'message': str(e)}
     
-    def backtest(self, signals, price_data, initial_balance=10000):
+    def backtest(self, signals, price_data, initial_balance=10000, market_sentiment_data=None, volatility_data=None):
         """
         回测策略
 
@@ -169,6 +223,8 @@ class TradingStrategy:
             signals: 交易信号
             price_data: 价格数据
             initial_balance: 初始余额
+            market_sentiment_data: 市场情绪数据
+            volatility_data: 波动率数据
 
         Returns:
             dict: 回测结果
@@ -180,6 +236,13 @@ class TradingStrategy:
 
             for i, signal in enumerate(signals):
                 current_price = price_data.iloc[i] if hasattr(price_data, 'iloc') else price_data[i]
+                
+                # 动态调整参数（如果有市场数据）
+                if market_sentiment_data is not None and volatility_data is not None:
+                    if i < len(market_sentiment_data) and i < len(volatility_data):
+                        market_sentiment = market_sentiment_data.iloc[i] if hasattr(market_sentiment_data, 'iloc') else market_sentiment_data[i]
+                        volatility = volatility_data.iloc[i] if hasattr(volatility_data, 'iloc') else volatility_data[i]
+                        self.adjust_parameters(market_sentiment, volatility)
 
                 if signal == 1 and position == 0:
                     # 买入
@@ -197,7 +260,9 @@ class TradingStrategy:
                         'action': 'buy',
                         'price': current_price,
                         'amount': position_size,
-                        'balance': balance
+                        'balance': balance,
+                        'max_position_size': self.max_position_size,
+                        'threshold': self.threshold
                     })
                 elif signal == -1 and position > 0:
                     # 卖出
@@ -213,7 +278,9 @@ class TradingStrategy:
                         'action': 'sell',
                         'price': current_price,
                         'amount': position,
-                        'balance': balance
+                        'balance': balance,
+                        'max_position_size': self.max_position_size,
+                        'threshold': self.threshold
                     })
                     position = 0
 

@@ -44,11 +44,94 @@ class DataProcessor:
             # 复制数据
             features_df = df.copy()
             
-            # 计算技术指标
+            # 计算技术指标 - TradingView常用指标
+            
+            # 1. RSI (Relative Strength Index)
+            def calculate_rsi(series, period=14):
+                delta = series.diff()
+                gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+                rs = gain / loss
+                rsi = 100 - (100 / (1 + rs))
+                return rsi
+            
+            features_df['rsi'] = calculate_rsi(features_df['price'])
+            
+            # 2. MACD (Moving Average Convergence Divergence)
+            exp1 = features_df['price'].ewm(span=12, adjust=False).mean()
+            exp2 = features_df['price'].ewm(span=26, adjust=False).mean()
+            features_df['macd'] = exp1 - exp2
+            features_df['macd_signal'] = features_df['macd'].ewm(span=9, adjust=False).mean()
+            features_df['macd_hist'] = features_df['macd'] - features_df['macd_signal']
+            
+            # 3. Bollinger Bands
+            ma20 = features_df['price'].rolling(window=20).mean()
+            std20 = features_df['price'].rolling(window=20).std()
+            features_df['bb_upper'] = ma20 + (std20 * 2)
+            features_df['bb_lower'] = ma20 - (std20 * 2)
+            features_df['bb_width'] = (features_df['bb_upper'] - features_df['bb_lower']) / ma20
+            features_df['bb_position'] = (features_df['price'] - features_df['bb_lower']) / (features_df['bb_upper'] - features_df['bb_lower'])
+            
+            # 4. Stochastic Oscillator
+            low14 = features_df['price'].rolling(window=14).min()
+            high14 = features_df['price'].rolling(window=14).max()
+            features_df['stoch_k'] = ((features_df['price'] - low14) / (high14 - low14)) * 100
+            features_df['stoch_d'] = features_df['stoch_k'].rolling(window=3).mean()
+            
+            # 5. ADX (Average Directional Index)
+            def calculate_adx(high, low, close, period=14):
+                plus_dm = high.diff()
+                minus_dm = low.diff()
+                plus_dm[plus_dm < 0] = 0
+                minus_dm[minus_dm > 0] = 0
+                minus_dm = abs(minus_dm)
+                
+                tr1 = abs(high - low)
+                tr2 = abs(high - close.shift())
+                tr3 = abs(low - close.shift())
+                tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                
+                atr = tr.rolling(window=period).mean()
+                plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
+                minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+                dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+                adx = dx.rolling(window=period).mean()
+                return adx
+            
+            features_df['adx'] = calculate_adx(features_df['price'], features_df['price'], features_df['price'])
+            
+            # 6. 其他技术指标
             features_df['price_change_abs'] = abs(features_df['price_change'])
             features_df['price_change_volatility'] = features_df['price_change'].rolling(window=7).std()
             features_df['volume_change'] = features_df['volume'].pct_change() * 100
             features_df['volume_change'] = features_df['volume_change'].fillna(0)
+            features_df['volume_ma7'] = features_df['volume'].rolling(window=7).mean()
+            features_df['volume_ma30'] = features_df['volume'].rolling(window=30).mean()
+            features_df['price_ma_diff'] = features_df['ma7'] - features_df['ma30']
+            
+            # 7. 市场情绪指数（模拟）
+            # 基于价格波动和交易量的情绪指标
+            features_df['market_sentiment'] = np.where(
+                (features_df['price_change'] > 2) & (features_df['volume'] > features_df['volume_ma7']),
+                1,  # 极度乐观
+                np.where(
+                    (features_df['price_change'] > 0.5) & (features_df['volume'] > features_df['volume_ma7']),
+                    0.5,  # 乐观
+                    np.where(
+                        (features_df['price_change'] < -2) & (features_df['volume'] > features_df['volume_ma7']),
+                        -1,  # 极度悲观
+                        np.where(
+                            (features_df['price_change'] < -0.5) & (features_df['volume'] > features_df['volume_ma7']),
+                            -0.5,  # 悲观
+                            0  # 中性
+                        )
+                    )
+                )
+            )
+            
+            # 8. 波动率指标
+            features_df['volatility_7d'] = features_df['price'].rolling(window=7).std() / features_df['price'].rolling(window=7).mean()
+            features_df['volatility_30d'] = features_df['price'].rolling(window=30).std() / features_df['price'].rolling(window=30).mean()
             
             # 计算占星特征
             # 行星位置的变化率
@@ -60,7 +143,7 @@ class DataProcessor:
                 features_df[f"{planet}_dec_change"] = features_df[f"{planet}_dec_change"].fillna(0)
             
             # 相位角度的标准化
-            aspect_columns = [col for col in features_df.columns if '_' in col and not col.startswith('price') and not col.startswith('volume') and not col.startswith('market') and not col.startswith('ma')]
+            aspect_columns = [col for col in features_df.columns if '_' in col and not col.startswith('price') and not col.startswith('volume') and not col.startswith('market') and not col.startswith('ma') and not col in ['rsi', 'macd', 'macd_signal', 'macd_hist', 'bb_upper', 'bb_lower', 'bb_width', 'bb_position', 'stoch_k', 'stoch_d', 'adx', 'market_sentiment', 'volatility_7d', 'volatility_30d']]
             for col in aspect_columns:
                 if col not in ['date', 'timestamp']:
                     # 标准化相位角度（0-180度）
@@ -73,6 +156,8 @@ class DataProcessor:
             return features_df
         except Exception as e:
             logger.error(f"提取特征失败: {e}")
+            import traceback
+            traceback.print_exc()
             return pd.DataFrame()
     
     def preprocess_data(self, df, target_col='price_change'):

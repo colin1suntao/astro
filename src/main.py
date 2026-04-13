@@ -139,7 +139,15 @@ class AstroBitcoinModel:
                 logger.error("评估模型失败")
                 return
             
-            # 5. 生成交易信号
+            # 5. 动态调整策略参数
+            logger.info("开始调整策略参数...")
+            # 计算市场情绪和波动率
+            market_sentiment = features_df['market_sentiment'].iloc[-1]
+            volatility = features_df['volatility_7d'].iloc[-1]
+            # 调整参数
+            self.strategy.adjust_parameters(market_sentiment, volatility)
+            
+            # 6. 生成交易信号
             logger.info("开始生成交易信号...")
             signals = self.strategy.generate_signals(y_pred)
             if not signals:
@@ -148,7 +156,17 @@ class AstroBitcoinModel:
             
             # 6. 回测策略
             logger.info("开始回测策略...")
-            backtest_results = self.strategy.backtest(signals, features_df['price'].iloc[-len(y_test):])
+            # 提取对应时期的市场情绪和波动率数据
+            test_start_idx = len(features_df) - len(y_test)
+            market_sentiment_data = features_df['market_sentiment'].iloc[test_start_idx:]
+            volatility_data = features_df['volatility_7d'].iloc[test_start_idx:]
+            
+            backtest_results = self.strategy.backtest(
+                signals, 
+                features_df['price'].iloc[-len(y_test):],
+                market_sentiment_data=market_sentiment_data,
+                volatility_data=volatility_data
+            )
             if not backtest_results:
                 logger.error("回测策略失败")
                 return
