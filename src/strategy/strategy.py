@@ -28,13 +28,13 @@ class TradingStrategy:
                 logger.error(f"交易所连接失败: {e}")
                 self.exchange = None
     
-    def generate_signals(self, predictions, threshold=0.5):
+    def generate_signals(self, predictions, threshold=0.4):
         """
         生成交易信号
         
         Args:
             predictions: 预测结果
-            threshold: 信号阈值
+            threshold: 信号阈值（使用优化后的参数）
             
         Returns:
             list: 交易信号列表，1表示买入，-1表示卖出，0表示持有

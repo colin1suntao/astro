@@ -38,8 +38,15 @@ class ModelTrainer:
                 self.model = RandomForestRegressor(n_estimators=100, random_state=42)
                 self.model.fit(X_train, y_train)
             elif self.model_type == 'xgboost':
-                # XGBoost模型
-                self.model = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
+                # XGBoost模型 - 使用优化后的参数
+                self.model = XGBRegressor(
+                    n_estimators=100,
+                    learning_rate=0.05,
+                    max_depth=5,
+                    subsample=1.0,
+                    colsample_bytree=0.9,
+                    random_state=42
+                )
                 self.model.fit(X_train, y_train)
             else:
                 raise ValueError(f"不支持的模型类型: {self.model_type}")
