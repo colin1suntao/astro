@@ -164,12 +164,12 @@ class TradingStrategy:
     def backtest(self, signals, price_data, initial_balance=10000):
         """
         回测策略
-        
+
         Args:
             signals: 交易信号
             price_data: 价格数据
             initial_balance: 初始余额
-            
+
         Returns:
             dict: 回测结果
         """
@@ -177,18 +177,23 @@ class TradingStrategy:
             balance = initial_balance
             position = 0
             trade_history = []
-            
+
             for i, signal in enumerate(signals):
-                current_price = price_data[i]
-                
+                current_price = price_data.iloc[i] if hasattr(price_data, 'iloc') else price_data[i]
+
                 if signal == 1 and position == 0:
                     # 买入
                     position_size = (balance * self.max_position_size) / current_price
                     cost = position_size * current_price
                     balance -= cost
                     position = position_size
+                    # 尝试获取日期，如果没有索引则使用序号
+                    try:
+                        trade_date = price_data.index[i] if hasattr(price_data, 'index') else f'Day {i}'
+                    except:
+                        trade_date = f'Day {i}'
                     trade_history.append({
-                        'date': price_data.index[i],
+                        'date': trade_date,
                         'action': 'buy',
                         'price': current_price,
                         'amount': position_size,
@@ -198,21 +203,27 @@ class TradingStrategy:
                     # 卖出
                     proceeds = position * current_price
                     balance += proceeds
+                    # 尝试获取日期，如果没有索引则使用序号
+                    try:
+                        trade_date = price_data.index[i] if hasattr(price_data, 'index') else f'Day {i}'
+                    except:
+                        trade_date = f'Day {i}'
                     trade_history.append({
-                        'date': price_data.index[i],
+                        'date': trade_date,
                         'action': 'sell',
                         'price': current_price,
                         'amount': position,
                         'balance': balance
                     })
                     position = 0
-            
+
             # 计算最终余额
-            final_balance = balance + (position * price_data.iloc[-1])
+            final_price = price_data.iloc[-1] if hasattr(price_data, 'iloc') else price_data[-1]
+            final_balance = balance + (position * final_price)
             total_return = (final_balance - initial_balance) / initial_balance * 100
-            
+
             logger.info(f"回测完成，初始余额: ${initial_balance:.2f}，最终余额: ${final_balance:.2f}，总收益率: {total_return:.2f}%")
-            
+
             return {
                 'initial_balance': initial_balance,
                 'final_balance': final_balance,
@@ -221,4 +232,6 @@ class TradingStrategy:
             }
         except Exception as e:
             logger.error(f"回测策略失败: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
