@@ -1,0 +1,35 @@
+{
+  "seed": 42,
+  "symbol": "BTCUSDT",
+  "horizon_days": 1,
+  "transaction_cost_bps": 10,
+  "slippage_bps": 5,
+  "signal_long_threshold": 0.58,
+  "signal_half_threshold": 0.52,
+  "rolling_train_days": 720,
+  "rolling_test_days": 90,
+  "risk": {
+    "vol_lookback": 20,
+    "target_vol_daily": 0.02,
+    "max_daily_loss": 0.02,
+    "max_drawdown": 0.12
+  },
+  "feature_cols": [
+    "ret_1d",
+    "ret_3d",
+    "ret_5d",
+    "vol_20d",
+    "ma_5_gap",
+    "ma_20_gap",
+    "volume_z_20d",
+    "sun_lon_sin",
+    "sun_lon_cos",
+    "moon_lon_sin",
+    "moon_lon_cos",
+    "is_new_moon",
+    "is_full_moon",
+    "is_mercury_retrograde"
+  ],
+  "label_col": "y_up_fwd_1d",
+  "return_col": "y_ret_fwd_1d"
+}
