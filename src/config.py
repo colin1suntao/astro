@@ -24,7 +24,7 @@ class Config:
     PREDICTION_HORIZON = int(os.getenv('PREDICTION_HORIZON', '7'))
     
     # 风险管理配置
-    MAX_POSITION_SIZE = float(os.getenv('MAX_POSITION_SIZE', '0.1'))
+    MAX_POSITION_SIZE = float(os.getenv('MAX_POSITION_SIZE', '0.2'))
     STOP_LOSS = float(os.getenv('STOP_LOSS', '0.05'))
     TAKE_PROFIT = float(os.getenv('TAKE_PROFIT', '0.1'))
     

@@ -227,3 +227,225 @@ class Visualizer:
                 plt.show()
         except Exception as e:
             logger.error(f"绘制特征重要性图失败: {e}")
+    
+    def plot_parameter_changes(self, backtest_results, save=False):
+        """
+        绘制策略参数变化图
+        
+        Args:
+            backtest_results: 回测结果
+            save: 是否保存图片
+        """
+        try:
+            # 提取交易历史
+            trade_history = backtest_results['trade_history']
+            if not trade_history:
+                logger.warning("回测结果中没有交易历史")
+                return
+            
+            # 转换为DataFrame
+            trade_df = pd.DataFrame(trade_history)
+            
+            # 检查是否包含参数列
+            param_columns = ['max_position_size', 'threshold', 'stop_loss', 'take_profit']
+            if not all(col in trade_df.columns for col in param_columns):
+                logger.warning("回测结果中没有参数数据")
+                return
+            
+            fig, axs = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle('Strategy Parameter Changes', fontsize=18)
+            
+            # 绘制最大仓位变化
+            axs[0, 0].plot(trade_df['date'], trade_df['max_position_size'])
+            axs[0, 0].set_title('Max Position Size')
+            axs[0, 0].set_xlabel('Date')
+            axs[0, 0].set_ylabel('Position Size')
+            axs[0, 0].tick_params(axis='x', rotation=45)
+            
+            # 绘制阈值变化
+            axs[0, 1].plot(trade_df['date'], trade_df['threshold'])
+            axs[0, 1].set_title('Signal Threshold')
+            axs[0, 1].set_xlabel('Date')
+            axs[0, 1].set_ylabel('Threshold')
+            axs[0, 1].tick_params(axis='x', rotation=45)
+            
+            # 绘制止损变化
+            axs[1, 0].plot(trade_df['date'], trade_df['stop_loss'])
+            axs[1, 0].set_title('Stop Loss')
+            axs[1, 0].set_xlabel('Date')
+            axs[1, 0].set_ylabel('Stop Loss')
+            axs[1, 0].tick_params(axis='x', rotation=45)
+            
+            # 绘制止盈变化
+            axs[1, 1].plot(trade_df['date'], trade_df['take_profit'])
+            axs[1, 1].set_title('Take Profit')
+            axs[1, 1].set_xlabel('Date')
+            axs[1, 1].set_ylabel('Take Profit')
+            axs[1, 1].tick_params(axis='x', rotation=45)
+            
+            # 调整布局
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
+            
+            if save:
+                output_path = os.path.join(self.output_dir, 'parameter_changes.png')
+                plt.savefig(output_path)
+                logger.info(f"策略参数变化图保存成功: {output_path}")
+            else:
+                plt.show()
+        except Exception as e:
+            logger.error(f"绘制策略参数变化图失败: {e}")
+    
+    def plot_strategy_performance(self, backtest_results, save=False):
+        """
+        绘制策略性能分析图
+        
+        Args:
+            backtest_results: 回测结果
+            save: 是否保存图片
+        """
+        try:
+            # 提取交易历史
+            trade_history = backtest_results['trade_history']
+            if not trade_history:
+                logger.warning("回测结果中没有交易历史")
+                return
+            
+            # 转换为DataFrame
+            trade_df = pd.DataFrame(trade_history)
+            
+            # 计算交易统计
+            total_trades = len(trade_df)
+            buy_trades = len(trade_df[trade_df['action'] == 'buy'])
+            sell_trades = len(trade_df[trade_df['action'] == 'sell'])
+            
+            # 计算胜率
+            if sell_trades > 0:
+                winning_trades = 0
+                for i in range(1, len(trade_df)):
+                    if trade_df.iloc[i]['action'] == 'sell':
+                        buy_price = trade_df.iloc[i-1]['price']
+                        sell_price = trade_df.iloc[i]['price']
+                        if sell_price > buy_price:
+                            winning_trades += 1
+                win_rate = (winning_trades / sell_trades) * 100
+            else:
+                win_rate = 0
+            
+            # 计算收益
+            initial_balance = backtest_results['initial_balance']
+            final_balance = backtest_results['final_balance']
+            total_return = backtest_results['total_return']
+            
+            # 准备数据
+            performance_data = {
+                'Metric': ['Total Trades', 'Buy Trades', 'Sell Trades', 'Win Rate'],
+                'Value': [str(total_trades), str(buy_trades), str(sell_trades), f"{win_rate:.2f}%"]
+            }
+            
+            performance_df = pd.DataFrame(performance_data)
+            
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+            
+            # 绘制性能指标
+            ax1.bar(performance_df['Metric'], performance_df['Value'], color='skyblue')
+            ax1.set_title('Trading Performance')
+            ax1.set_ylabel('Value')
+            ax1.tick_params(axis='x', rotation=45)
+            
+            # 绘制余额变化
+            ax2.plot(trade_df['date'], trade_df['balance'])
+            ax2.set_title('Account Balance Over Time')
+            ax2.set_xlabel('Date')
+            ax2.set_ylabel('Balance (USD)')
+            ax2.tick_params(axis='x', rotation=45)
+            
+            # 调整布局
+            plt.tight_layout()
+            
+            if save:
+                output_path = os.path.join(self.output_dir, 'strategy_performance.png')
+                plt.savefig(output_path)
+                logger.info(f"策略性能分析图保存成功: {output_path}")
+            else:
+                plt.show()
+        except Exception as e:
+            logger.error(f"绘制策略性能分析图失败: {e}")
+    
+    def plot_market_sentiment_vs_parameters(self, features_df, backtest_results, save=False):
+        """
+        绘制市场情绪与参数调整的关系图
+        
+        Args:
+            features_df: 特征数据
+            backtest_results: 回测结果
+            save: 是否保存图片
+        """
+        try:
+            # 提取交易历史
+            trade_history = backtest_results['trade_history']
+            if not trade_history:
+                logger.warning("回测结果中没有交易历史")
+                return
+            
+            # 转换为DataFrame
+            trade_df = pd.DataFrame(trade_history)
+            
+            # 检查是否包含市场情绪数据
+            if 'market_sentiment' not in features_df.columns:
+                logger.warning("特征数据中没有市场情绪数据")
+                return
+            
+            # 检查是否包含参数列
+            param_columns = ['max_position_size', 'threshold', 'stop_loss', 'take_profit']
+            if not all(col in trade_df.columns for col in param_columns):
+                logger.warning("回测结果中没有参数数据")
+                return
+            
+            # 合并数据
+            # 确保日期类型一致
+            features_df['date'] = features_df['date'].astype(str)
+            trade_df['date'] = trade_df['date'].astype(str)
+            merged_df = pd.merge(features_df, trade_df, on='date', how='inner')
+            
+            if merged_df.empty:
+                logger.warning("合并数据为空")
+                return
+            
+            fig, axs = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle('Market Sentiment vs Strategy Parameters', fontsize=18)
+            
+            # 绘制市场情绪与最大仓位的关系
+            axs[0, 0].scatter(merged_df['market_sentiment'], merged_df['max_position_size'])
+            axs[0, 0].set_title('Market Sentiment vs Max Position Size')
+            axs[0, 0].set_xlabel('Market Sentiment')
+            axs[0, 0].set_ylabel('Max Position Size')
+            
+            # 绘制市场情绪与阈值的关系
+            axs[0, 1].scatter(merged_df['market_sentiment'], merged_df['threshold'])
+            axs[0, 1].set_title('Market Sentiment vs Threshold')
+            axs[0, 1].set_xlabel('Market Sentiment')
+            axs[0, 1].set_ylabel('Threshold')
+            
+            # 绘制市场情绪与止损的关系
+            axs[1, 0].scatter(merged_df['market_sentiment'], merged_df['stop_loss'])
+            axs[1, 0].set_title('Market Sentiment vs Stop Loss')
+            axs[1, 0].set_xlabel('Market Sentiment')
+            axs[1, 0].set_ylabel('Stop Loss')
+            
+            # 绘制市场情绪与止盈的关系
+            axs[1, 1].scatter(merged_df['market_sentiment'], merged_df['take_profit'])
+            axs[1, 1].set_title('Market Sentiment vs Take Profit')
+            axs[1, 1].set_xlabel('Market Sentiment')
+            axs[1, 1].set_ylabel('Take Profit')
+            
+            # 调整布局
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
+            
+            if save:
+                output_path = os.path.join(self.output_dir, 'sentiment_vs_parameters.png')
+                plt.savefig(output_path)
+                logger.info(f"市场情绪与参数关系图保存成功: {output_path}")
+            else:
+                plt.show()
+        except Exception as e:
+            logger.error(f"绘制市场情绪与参数关系图失败: {e}")
